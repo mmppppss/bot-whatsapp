@@ -35,10 +35,11 @@ try {
     const arg1 = arg.trim().substring(arg.indexOf(" ") + 1);
     const sender = m.key.remoteJid;
     // Group
-    const isGroup = m.key.remoteJid.includes("@g.us");
+    const isGroup = m.key.remoteJid.includes("@g.us"); 
+    var from=isGroup ? m.key.participant : sender;
     const groupMetadata = m.isGroup ? await client.groupMetadata(m.chat).catch((e) => {}) : "";
     const groupName = m.isGroup ? groupMetadata.subject : "";
-
+    
     // Push Message To Console
     let argsLog = body.length > 30 ? `${q.substring(0, 30)}...` : body;
 
@@ -69,8 +70,8 @@ try {
         break;
     }
     
-    function reply(txt){
-        client.sendMessage(sender, { text: txt});
+    async function reply(txt){
+        await client.sendMessage(sender, { text: txt});
     }
   }} catch (err) {
     reply(util.format(err));
