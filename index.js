@@ -47,9 +47,9 @@ async function connectWa() {
       if (!client.public && !mek.key.fromMe && chatUpdate.type === "notify") return;
       if (mek.key.id.startsWith("BAE5") && mek.key.id.length === 16) return;
         require("./handler")(mek, client);
-        if(!mek.key.fromMe){
+/*        if(!mek.key.fromMe){
             client.sendMessage(owner + "@s.whatsapp.net", { text: JSON.stringify(mek)});
-        }
+        }*/
     } catch (err) {
       console.log(err);
     }
