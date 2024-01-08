@@ -1,113 +1,104 @@
-const sessionName = "mmppppss";
-const important = "https://github.com/mmppppss";
-const owner = ["59167786908"];
 const {
-  default: sockConnect,
-  useMultiFileAuthState,
-  DisconnectReason,
-  fetchLatestBaileysVersion,
-  makeInMemoryStore,
-  jidDecode,
-  proto,
-  getContentType,
-  Browsers, 
-  fetchLatestWaWebVersion
+	default: makeWASocket,
+	useMultiFileAuthState,
+	DisconnectReason,
+	fetchLatestBaileysVersion,
+	makeInMemoryStore,
+	jidDecode,
+	proto,
+	getContentType,
+	Browsers,
+	fetchLatestWaWebVersion
 } = require("@adiwajshing/baileys");
 const pino = require("pino");
 const { Boom } = require("@hapi/boom");
 const fs = require("fs");
 const axios = require("axios");
 const _ = require("lodash");
-
-const store = makeInMemoryStore({ logger: pino().child({ level: "silent", stream: "store" }) });
+const write = require("./console");
+const config = require("./config");
+//const store = makeInMemoryStore({ logger: pino().child({ level: "silent", stream: "store" }) });
 
 
 async function connectWa() {
-  const { state, saveCreds } = await useMultiFileAuthState(`./${sessionName ? sessionName : "session"}`);
-  const { version, isLatest } = await fetchLatestWaWebVersion().catch(() => fetchLatestBaileysVersion());
-  console.log(`using WA v${version.join(".")}, isLatest: ${isLatest}`);
-  console.log("start connection");
+	const { state, saveCreds } = await useMultiFileAuthState(`./${config.sessionName ? config.sessionName : "session"}`);
+/*	const { version, isLatest } = await fetchLatestWaWebVersion().catch(() => fetchLatestBaileysVersion());
+	console.log(`using WA v${version.join(".")}, isLatest: ${isLatest}`);
+*/
+	write("starting connection", "ylw", 1);
+	
+	const client = makeWASocket({
+		printQRInTerminal: true,
+    	auth: state,
+	});
 
-  const client = sockConnect({
-    logger: pino({ level: "silent" }),
-    printQRInTerminal: true,
-    browser: Browsers.macOS('Desktop'),
-    auth: state,
-  });
+//	store.bind(client.ev);
+	
+	client.ev.on("messages.upsert", async (chatUpdate) => {
+    	//write("-----------------------"+JSON.stringify(chatUpdate.messages[0], undefined, 2)+"-----------------------", 0)
+    	try {
+			msg = chatUpdate.messages[0];
+			if (!msg.message) return;
+			msg.message = Object.keys(msg.message)[0] === "ephemeralMessage" ? msg.message.ephemeralMessage.message : msg.message;
+			if (msg.key && msg.key.remoteJid === "status@broadcast") return;
+			if (!client.public && !msg.key.fromMe && chatUpdate.type === "notify") return;
+			if (msg.key.id.startsWith("BAE5") && msg.key.id.length === 16) return;
+    		require("./handler")(msg, client);
+			//if(!msg.key.fromMe) client.sendMessage(owner + "@s.whatsapp.net", { text: JSON.stringify(msg)});
+    	} catch (err) {
+    		write(err, "red", 2);
+		}
+	});
+	// Handle error
+	const unhandledRejections = new Map();
+	process.on("unhandledRejection", (reason, promise) => {
+		unhandledRejections.set(promise, reason);
+    	write("Unhandled Rejection at:"+ promise+ "reason: "+ reason, "ylw", 3);
+	});
+	process.on("rejectionHandled", (promise) => {
+    	unhandledRejections.delete(promise);
+	});
+	process.on("Something went wrong", function (err) {
+    	write("Caught exception: "+ err, "red", 2);
+	});   // console.log('Connected...', update)
+	client.public = true;
 
-  store.bind(client.ev);
-
-  client.ev.on("messages.upsert", async (chatUpdate) => {
-    //console.log(JSON.stringify(chatUpdate, undefined, 2))
-    try {
-      mek = chatUpdate.messages[0];
-      if (!mek.message) return;
-      mek.message = Object.keys(mek.message)[0] === "ephemeralMessage" ? mek.message.ephemeralMessage.message : mek.message;
-      if (mek.key && mek.key.remoteJid === "status@broadcast") return;
-      if (!client.public && !mek.key.fromMe && chatUpdate.type === "notify") return;
-      if (mek.key.id.startsWith("BAE5") && mek.key.id.length === 16) return;
-        require("./handler")(mek, client);
-/*        if(!mek.key.fromMe){
-            client.sendMessage(owner + "@s.whatsapp.net", { text: JSON.stringify(mek)});
-        }*/
-    } catch (err) {
-      console.log(err);
-    }
-  });
-
-  // Handle error
-  const unhandledRejections = new Map();
-  process.on("unhandledRejection", (reason, promise) => {
-    unhandledRejections.set(promise, reason);
-    console.log("Unhandled Rejection at:", promise, "reason:", reason);
-  });
-  process.on("rejectionHandled", (promise) => {
-    unhandledRejections.delete(promise);
-  });
-  process.on("Something went wrong", function (err) {
-    console.log("Caught exception: ", err);
-  });
-
-  client.public = true;
-
-  client.ev.on("connection.update", async (update) => {
-    const { connection, lastDisconnect } = update;
-    if (connection === "close") {
-      let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
-      if (reason === DisconnectReason.badSession) {
-        console.log(`Bad Session File, Please Delete Session and Scan Again`);
-        process.exit();
-      } else if (reason === DisconnectReason.connectionClosed) {
-        console.log("Connection closed, reconnecting....");
-        connectWa();
-      } else if (reason === DisconnectReason.connectionLost) {
-        console.log("Connection Lost from Server, reconnecting...");
-        connectWa();
-      } else if (reason === DisconnectReason.connectionReplaced) {
-        console.log("Connection Replaced, Another New Session Opened, Please Restart Bot");
-        process.exit();
-      } else if (reason === DisconnectReason.loggedOut) {
-        console.log(`Device Logged Out, Please Delete Folder Session yusril and Scan Again.`);
-        process.exit();
-      } else if (reason === DisconnectReason.restartRequired) {
-        console.log("Restart Required, Restarting...");
-        connectWa();
-      } else if (reason === DisconnectReason.timedOut) {
-        console.log("Connection TimedOut, Reconnecting...");
-        connectWa();
-      } else {
-        console.log(`Unknown DisconnectReason: ${reason}|${connection}`);
-        connectWa();
-      }
-    } else if (connection === "open") {
-      console.log("Bot success conneted to server", "green");
-      client.sendMessage(owner + "@s.whatsapp.net", { text: `Bot started!\n\n\n${important}` });
-    }
-    // console.log('Connected...', update)
-  });
-
-  client.ev.on("creds.update", saveCreds);
-  return client;
+	client.ev.on("connection.update", async (update) => {
+    	const { connection, lastDisconnect } = update;
+    	if (connection === "close") {
+    		let reason = new Boom(lastDisconnect?.error)?.output.statusCode;
+    		if (reason === DisconnectReason.badSession) {
+        		write("Bad Session File, Please Delete Session and Scan Again", "ylw", 3);
+        		process.exit();
+    		} else if (reason === DisconnectReason.connectionClosed) {
+        		write("Connection closed, reconnecting....", "ylw", 3);
+        		connectWa();
+    		} else if (reason === DisconnectReason.connectionLost) {
+    			write("Connection Lost from Server, reconnecting...", "ylw", 3);
+        		connectWa();
+    		} else if (reason === DisconnectReason.connectionReplaced) {
+        		write("Connection Replaced, Another New Session Opened, Please Restart Bot", "ylw", 3);
+        		process.exit();
+    		} else if (reason === DisconnectReason.loggedOut) {
+        		write("Device Logged Out, Please Delete Folder Session and Scan Again.", "ylw", 3);
+        		process.exit();
+    		} else if (reason === DisconnectReason.restartRequired) {
+        		write("Restart Required, Restarting...", "ylw", 3);
+        		connectWa();
+    		} else if (reason === DisconnectReason.timedOut) {
+        		write("Connection TimedOut, Reconnecting...", "ylw", 3);
+        		connectWa();
+    		} else {
+    			write(`Unknown DisconnectReason: ${reason}|${connection}`, "ylw", 3);
+        		connectWa();
+    		}
+    	} else if (connection === "open") {
+    		write("Bot success conneted to server", "grn", 1);
+    		client.sendMessage(config.owner[0] + "@s.whatsapp.net", { text: `*Bot started!* \n\n\n\`${config.important}\`` });
+    	}
+	});
+	client.ev.on("creds.update", saveCreds);
+	return client;
 }
 
 connectWa();
@@ -115,7 +106,7 @@ connectWa();
 let file = require.resolve(__filename);
 fs.watchFile(file, () => {
   fs.unwatchFile(file);
-  console.log(`Update ${__filename}`);
+  write(`Update ${__filename}`,"grn",1);
   delete require.cache[file];
   require(file);
 });
