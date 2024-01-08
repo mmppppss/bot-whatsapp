@@ -14,6 +14,9 @@ const util = require("util");
 const write = require("./console");
 const config = require("./config")
 const db = require("./db")
+const ytdl = require('ytdl-core')
+const https = require('https');
+const request=require('request')
 var save = true;
 module.exports = handler = async (m, client) => {
 	type=Object.keys(m.message)[0];
@@ -108,6 +111,51 @@ module.exports = handler = async (m, client) => {
             }
             reply(menutext)
         }
+    }),
+	
+	mp3:(args=[])=>({
+        args,
+        help:"Descarga un audio de youtube",
+        run(){
+            if(this.args[0]=="-h"){
+                reply(this.help)
+                return this.help
+            }
+        ytmp3(args[0],from,msg, client)
+        }
+    }),
+    mp4:(args=[])=>({
+        args,
+        help:"Descarga un video de youtube",
+        run(){
+            if(this.args[0]=="-h"){
+                reply(this.help)
+                return this.help
+            }
+            ytmp4(args[0],from,msg, client)
+        }
+    }),
+    archives:(args=[])=>({
+        args,
+        help:"Busca un archivo en archive.org",
+        run(){
+            if(this.args[0]=="-h"){
+                reply(this.help)
+                return this.help
+            }
+         archSearch(args.toString().replaceAll(',',' '),from,msg, client)
+        }
+    }),
+    archivedl:(args=[])=>({
+        args,
+        help:"Descarga un archivo de archive.org",
+        run(){
+            if(this.args[0]=="-h"){
+                reply(this.help)
+                return this.help
+            }
+         archDown(args[0],from,msg, client)
+        }
     })
 }
 		if (isCmd) {
@@ -146,7 +194,96 @@ module.exports = handler = async (m, client) => {
 };
 
 
+const ytmp3 = async (Link, fromId, quotedMsg, client) => {
+    try {
+        let info = await ytdl.getInfo(Link)
+        info=info.player_response.videoDetails
+        info=`_${info.title}_\n\nby:_${info.author}_ \n\n\n${info.shortDescription}` 
+        let mp3File = './download/'+genRandom(4)+'ytdl.mp3'
+        console.log('Downloading audio')
+        ytdl(Link, { filter: 'audioonly' })
+            .pipe(fs.createWriteStream(mp3File))
+            .on('finish', async () => {
+                await client.sendMessage(fromId, { audio: fs.readFileSync(mp3File), mimetype: 'audio/mpeg' }, { quoted: quotedMsg })
+                fs.unlinkSync(mp3File)
+            })
+   } catch (err) {
+        console.log(`[ytmp3 err] ${err}`)
+        await client.sendMessage(fromId, { text:"Error :("}, { quoted: quotedMsg })
+    }
+}
 
+const ytmp4 = async (Link, fromId, quotedMsg, client) => {
+    try {
+        let info = await ytdl.getInfo(Link)
+        info=info.player_response.videoDetails
+        info=`_${info.title}_\n\nby:_${info.author}_ \n\n\n${info.shortDescription}` 
+        let mp4File = './download/'+ genRandom(4)+'ytdl.mp4'
+        console.log('Downloading audio')
+        ytdl(Link)
+            .pipe(fs.createWriteStream(mp4File))
+            .on('finish', async () => {
+                await client.sendMessage(fromId, { video: fs.readFileSync(mp4File), gifPlayback: false, mimetype:'video/mp4', caption:info}, { quoted: quotedMsg })
+                fs.unlinkSync(mp4File)
+            })
+    } catch (err) {
+        console.log(`[ytmp4] ${err}`)
+        await client.sendMessage(fromId, { text:"Error :("}, { quoted: quotedMsg })
+    }
+}
+
+const archSearch= async(text, fromId, quotedMsg, client)=>{
+        let jsonData ={};
+        let textData="";
+        const search = text
+        const urlSearch = `https://archive.org/advancedsearch.php?q=${search}&fl%5B%5D=description&fl%5B%5D=identifier&fl%5B%5D=title&sort%5B%5D=&sort%5B%5D=&sort%5B%5D=&rows=3&page=1&output=json&callback=callback&save=yes#raw`;
+    https.get(urlSearch, (response) => {
+        let data = '';
+        response.on('data', (chunk) => {
+            data += chunk;
+        });
+
+    response.on('end', () => {
+        jsonData=JSON.parse(data.split('"docs":')[1].replace("}})",""))
+        for(i of jsonData){
+
+            urlDetails=`https://archive.org/details/${i.identifier}&output=json`
+            https.get(urlDetails, (response) => {
+                let data2 = '';
+                response.on('data', (chunk) => {
+                    data2 += chunk;
+                });
+
+                response.on('end', () => {
+                    textData+=("\n\n*Nombre:* "+i.title+"\n*Descripcion:* "+i.description.substring(0,420)+"\n*Files:*")
+                    jsonData2=JSON.parse(data2)
+                    for(file in jsonData2.files){
+                        textData+=("\n   *FileName:* "+file+"\n   *FileSize:* "+jsonData2.files[file].size+"\n   *Downlink:* https://"+jsonData2.server+jsonData2.dir+file)
+                    }
+
+        client.sendMessage(fromId,{ text:textData},{quoted:quotedMsg})
+                });
+            });
+        }
+
+    }).on("error", (err) => {
+        client.sendMessage(fromId,{ text:"Error:("+err.message},{quoted:quotedMsg})
+    });
+})
+}
+const archDown=async(link,fromId, quotedMsg, client)=>{
+    linkSplit=link.split("/")
+    type=linkSplit[linkSplit.length-1].split(".")[1]
+    name=linkSplit[linkSplit.length-2]+"."+type
+
+    let dest = './download/'+name;
+    request(link)
+        .pipe(fs.createWriteStream(dest))
+        .on('close', () => {
+            console.log('Archivo descargado exitosamente.');
+            client.sendMessage(fromId,{document:{url:dest}, fileName:name, mimetype:type},{quoted:quotedMsg})
+        });
+}
 
 const writeJson = (file, data)=>{
     try{
@@ -156,7 +293,15 @@ const writeJson = (file, data)=>{
         return e;
     }
 }
-
+function genRandom(num) {
+    const characters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+	const charactersLength = characters.length;
+	let result = "";
+	for (let i = 0; i < num; i++) {
+		result += characters.charAt(Math.floor(Math.random() * charactersLength));
+	}
+    return result;
+}
 let file = require.resolve(__filename);
 fs.watchFile(file, () => {
   fs.unwatchFile(file);
