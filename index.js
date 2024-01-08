@@ -28,6 +28,7 @@ async function connectWa() {
 	write("starting connection", "ylw", 1);
 	
 	const client = makeWASocket({
+    	logger: pino({ level: 'silent' }),
 		printQRInTerminal: true,
     	auth: state,
 	});
