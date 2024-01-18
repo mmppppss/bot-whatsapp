@@ -1,0 +1,19 @@
+{
+  "name": "whatsapp-bot",
+  "version": "1.0.1",
+  "description": "bot para whatsapp",
+  "main": "new.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "mmppppss",
+  "license": "ISC",
+  "dependencies": {
+    "@adiwajshing/baileys": "github:WhiskeySockets/Baileys",
+    "@adiwajshing/keyed-db": "^0.2.4",
+    "lodash": "^4.17.21",
+    "qrcode-terminal": "^0.12.0",
+    "request": "^2.88.2",
+    "ytdl-core": "^4.11.5"
+  }
+}
